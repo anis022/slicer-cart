@@ -44,6 +44,7 @@ class EditableSegmentationResource(SegmentationResource):
         "You can customize the values the label(s) will have using the GUI below. "
         "Please define it to the best of your ability."
     )
+    required = True
 
     @classmethod
     def buildConfigGUI(

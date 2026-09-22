@@ -70,6 +70,7 @@ class EditableMarkupResource(MarkupResource):
         "You can specify what markups you expect to see, as well as their properties, in the"
         "GUI below. The 'value' column is only used when reading/writing to NIfTI format."
     )
+    required = True
 
     @classmethod
     def buildConfigGUI(
