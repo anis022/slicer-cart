@@ -1643,7 +1643,10 @@ class ResourceEditorDialogue(ChangeTrackingDialogue):
         # Resource type selector and description
         resourceTypeLabel = qt.QLabel(_("Resource Type:"))
         resourceTypeSelector = qt.QComboBox(None)
-        resourceTypeSelector.addItems(list(self._resource_type_map.keys()))
+        # Mark "required" resources w/ an asterisk
+        resourceTypeSelector.addItems(
+            [f"*{k}" if v.required else k for k, v in self._resource_type_map.items()]
+        )
         resourceTypeToolTip = _(
             "The resource type for this column."
             "\n\n"
@@ -1727,7 +1730,7 @@ class ResourceEditorDialogue(ChangeTrackingDialogue):
                 duf = self._cohort.reference_task.getDataUnitFactory()
                 prior_type = duf.resource_types().get(prior_type_id)
                 if prior_type is not None:
-                    resourceTypeSelector.setCurrentText(prior_type.pretty_name)
+                    self.resource_type = prior_type
                     # Reset our change state to prevent an erroneous "Unsaved Changes" pop-up
                     self._has_changed = False
 
@@ -1910,7 +1913,11 @@ class ResourceEditorDialogue(ChangeTrackingDialogue):
 
     @property
     def resource_type(self) -> "Optional[ResourceType]":
-        current_text = self.resourceTypeSelector.currentText.strip()
+        current_text: str = self.resourceTypeSelector.currentText.strip()
+        # Strip the leading asterisk if present
+        if current_text.startswith("*"):
+            current_text = current_text[1:]
+        # Fetch and return the datatype
         resource_type = self._resource_type_map.get(current_text)
         return resource_type
 
@@ -1921,8 +1928,12 @@ class ResourceEditorDialogue(ChangeTrackingDialogue):
             raise ValueError(
                 f"Resource type {new_type.pretty_name} is not a valid type for the selected data unit."
             )
+        display_name = new_type.pretty_name
+        # If this resource type is required, re-add the leading asterisk
+        if new_type.required:
+            display_name = f"*{display_name}"
         # Update our GUI (and everything else that follows) to match
-        self.resourceTypeSelector.setCurrentText(new_type.pretty_name)
+        self.resourceTypeSelector.setCurrentText(display_name)
 
 
 class CaseEditorDialog(ChangeTrackingDialogue):
