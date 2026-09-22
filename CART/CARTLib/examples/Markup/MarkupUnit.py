@@ -48,6 +48,15 @@ slicer.app.aboutToQuit.connect(onSlicerQuit)
 
 
 ## Resources ##
+class ReferenceMarkupResource(MarkupResource):
+    id = "markup_reference"
+    pretty_name = "Reference Markup"
+    description = _(
+        "A set of markups to display over viewed volumes. "
+        "Can be modified if desired, but the resulting changes will NOT be saved!"
+    )
+
+
 class EditableMarkupResource(MarkupResource):
 
     id = "markup_editable"
@@ -425,13 +434,16 @@ class MarkupModelManager:
 class MarkupUnit(CARTStandardUnit):
 
     # Replace the default Markup resource w/ our custom ones
-    RESOURCE_TYPES = {v.id: v for v in [
-        ReferenceVolumeResource,
-        VolumeResource,
-        SegmentationResource,
-        EditableMarkupResource,
-        MarkupResource,
-    ]}
+    RESOURCE_TYPES = {
+        v.id: v
+        for v in [
+            ReferenceVolumeResource,
+            VolumeResource,
+            SegmentationResource,
+            EditableMarkupResource,
+            ReferenceMarkupResource,
+        ]
+    }
 
     ## Setup ##
     def __init__(
