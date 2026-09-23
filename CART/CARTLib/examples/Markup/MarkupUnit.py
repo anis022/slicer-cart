@@ -48,9 +48,9 @@ slicer.app.aboutToQuit.connect(onSlicerQuit)
 
 
 ## Resources ##
-class ReferenceMarkupResource(MarkupResource):
+class SecondaryMarkupResource(MarkupResource):
     id = "markup_reference"
-    pretty_name = "Reference Markup"
+    pretty_name = "Secondary Markup"
     description = _(
         "A set of markups to display over viewed volumes. "
         "Can be modified if desired, but the resulting changes will NOT be saved!"
@@ -441,7 +441,7 @@ class MarkupUnit(CARTStandardUnit):
             VolumeResource,
             SegmentationResource,
             EditableMarkupResource,
-            ReferenceMarkupResource,
+            SecondaryMarkupResource,
         ]
     }
 
