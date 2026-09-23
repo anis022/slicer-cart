@@ -111,8 +111,7 @@ class EditableMarkupResource(MarkupResource):
             return _("⚠ Markup outputs are a combination of the subject name "
                      "+ this resource's name! ⚠")
         # Otherwise, use the name
-        return _(f"⚠ Markup outputs are a combination of the subject name "
-                 f"+ this resource's name! (i.e. '{uid}_{resource_name}.nii.gz') ⚠")
+        return _(f"⚠ Output for first case will be '{uid}_{resource_name}.nii.gz' ⚠")
 
 
 ## Markup Model ##
