@@ -698,5 +698,11 @@ class MarkupUnit(CARTStandardUnit):
         # Clear active observers for this unit
         self._clear_observers()
 
+        # Exit interaction mode (if we were in it)
+        # KO: This needs to be done *after* observers are cleared to prevent it restarting
+        inter_node = self._interactionNode
+        if inter_node.GetCurrentInteractionMode() == inter_node.Place:
+            inter_node.SetCurrentInteractionMode(inter_node.ViewTransform)
+
         # Python should handle cycling links; it does not for some reason
         self.markupModelManager._unit = None
