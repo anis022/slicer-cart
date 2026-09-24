@@ -1,6 +1,7 @@
 import itertools
 from datetime import datetime
 import json
+import logging
 from functools import singledispatch
 from pathlib import Path
 from typing import Any, Optional, Protocol, TYPE_CHECKING
@@ -13,6 +14,7 @@ from slicer.i18n import tr as _
 
 from CARTLib.core.DataUnitBase import DataUnitBase, ResourceType
 from CARTLib.core.LayoutManagement import Orientation, LayoutHandler
+from CARTLib.utils import nifti
 from CARTLib.utils.config import (
     DictBackedConfig,
     MasterProfileConfig,
@@ -33,6 +35,9 @@ if TYPE_CHECKING:
 NIFTI_SIDECAR_LABELS_KEY = "Labels"
 GENERATED_BY_KEY = "GeneratedBy"
 
+ORIGINAL_ORIENTATION_ATTR = "CART.OriginalOrientation"
+ORIGINAL_AFFINE_ATTR = "CART.OriginalAffine"
+
 
 ## LOADING ##
 def load_volume(path: Path):
@@ -45,7 +50,50 @@ def load_volume(path: Path):
     :param path: Path to the file
     """
     # Load the file into a volume node, hidden from view
-    return slicer.util.loadVolume(path, {"show": False})
+    volume_node = slicer.util.loadVolume(path, {"show": False})
+    tag_original_orientation(volume_node, path)
+    return volume_node
+
+
+def tag_original_orientation(node, path: Path) -> Optional[str]:
+    if node is None or ".nii" not in path.suffixes:
+        return None
+
+    try:
+        affine = nifti.read_affine(path)
+    except ValueError:
+        logging.warning(
+            f"Could not read a NIfTI header from '{path.name}'; its original "
+            "orientation will not be preserved when saving."
+        )
+        return None
+
+    if affine is None:
+        logging.warning(
+            f"File '{path.name}' has neither an sform nor a qform; its original "
+            "orientation will not be preserved when saving."
+        )
+        return None
+
+    orientation = nifti.affine_to_orientation(affine)
+    node.SetAttribute(ORIGINAL_ORIENTATION_ATTR, orientation)
+    node.SetAttribute(ORIGINAL_AFFINE_ATTR, json.dumps(affine))
+    return orientation
+
+
+def get_original_orientation(node) -> Optional[str]:
+    if node is None:
+        return None
+    return node.GetAttribute(ORIGINAL_ORIENTATION_ATTR)
+
+
+def get_original_affine(node) -> Optional[list[list[float]]]:
+    if node is None:
+        return None
+    raw = node.GetAttribute(ORIGINAL_AFFINE_ATTR)
+    if raw is None:
+        return None
+    return json.loads(raw)
 
 
 def load_label(path: Path):
