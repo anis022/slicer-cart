@@ -38,6 +38,8 @@ GENERATED_BY_KEY = "GeneratedBy"
 ORIGINAL_ORIENTATION_ATTR = "CART.OriginalOrientation"
 ORIGINAL_AFFINE_ATTR = "CART.OriginalAffine"
 
+ANATOMICAL_AXIS_OF = {"R": 0, "L": 0, "A": 1, "P": 1, "S": 2, "I": 2}
+
 
 ## LOADING ##
 def load_volume(path: Path):
@@ -56,6 +58,8 @@ def load_volume(path: Path):
 
 
 def tag_original_orientation(node, path: Path) -> Optional[str]:
+    # Read from the file rather than the node, as Slicer has already replaced
+    # the original orientation with its own by the time we get here.
     if node is None or ".nii" not in path.suffixes:
         return None
 
@@ -94,6 +98,66 @@ def get_original_affine(node) -> Optional[list[list[float]]]:
     if raw is None:
         return None
     return json.loads(raw)
+
+
+def get_node_orientation(node) -> str:
+    ijk_to_ras = vtk.vtkMatrix4x4()
+    node.GetIJKToRASMatrix(ijk_to_ras)
+    affine = [[ijk_to_ras.GetElement(row, col) for col in range(3)] for row in range(3)]
+    return nifti.affine_to_orientation(affine)
+
+
+def reorient_volume_node(node, target_orientation: str) -> bool:
+    current_orientation = get_node_orientation(node)
+    if current_orientation == target_orientation:
+        return False
+
+    # Work out, for each axis of the target, which of the current axes covers the
+    # same anatomical direction and whether it needs reversing to agree with it.
+    permutation = []
+    flips = []
+    for target_letter in target_orientation:
+        axis = ANATOMICAL_AXIS_OF[target_letter]
+        source_axis = next(
+            index
+            for index, current_letter in enumerate(current_orientation)
+            if ANATOMICAL_AXIS_OF[current_letter] == axis
+        )
+        permutation.append(source_axis)
+        flips.append(current_orientation[source_axis] != target_letter)
+
+    voxels = slicer.util.arrayFromVolume(node).transpose(2, 1, 0).copy()
+    source_shape = voxels.shape
+
+    voxels = voxels.transpose(permutation)
+    for target_axis, flip in enumerate(flips):
+        if flip:
+            voxels = np.flip(voxels, axis=target_axis)
+
+    # The same rearrangement has to be applied to the header, otherwise it would
+    # describe a layout the voxels no longer have. This matrix maps a new voxel
+    # index back to the old one, so combining it with the existing IJK to RAS
+    # matrix gives one that still points at the right place in the patient.
+    adjustment = vtk.vtkMatrix4x4()
+    adjustment.Zero()
+    adjustment.SetElement(3, 3, 1)
+    for target_axis, source_axis in enumerate(permutation):
+        if flips[target_axis]:
+            adjustment.SetElement(source_axis, target_axis, -1)
+            adjustment.SetElement(source_axis, 3, source_shape[source_axis] - 1)
+        else:
+            adjustment.SetElement(source_axis, target_axis, 1)
+
+    ijk_to_ras = vtk.vtkMatrix4x4()
+    node.GetIJKToRASMatrix(ijk_to_ras)
+    reoriented = vtk.vtkMatrix4x4()
+    vtk.vtkMatrix4x4.Multiply4x4(ijk_to_ras, adjustment, reoriented)
+
+    slicer.util.updateVolumeFromArray(
+        node, np.ascontiguousarray(voxels.transpose(2, 1, 0))
+    )
+    node.SetIJKToRASMatrix(reoriented)
+    return True
 
 
 def load_label(path: Path):
@@ -382,6 +446,12 @@ def save_segmentation_to_nifti(segment_node, volume_node, path: Path):
         slicer.modules.segmentations.logic().ExportVisibleSegmentsToLabelmapNode(
             segment_node, label_node, volume_node
         )
+
+        # Put the labelmap back into the orientation the reference volume was
+        # stored in, so downstream tools can line the two files up by index.
+        target_orientation = get_original_orientation(volume_node)
+        if target_orientation:
+            reorient_volume_node(label_node, target_orientation)
 
         # Save the active segmentation node to the desired directory
         slicer.util.saveNode(label_node, str(path))

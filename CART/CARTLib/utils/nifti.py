@@ -1,9 +1,15 @@
+"""
+Reads orientation out of a NIfTI header, since Slicer discards the original when
+it loads a file. Standard library only, to keep CART dependency-free.
+"""
+
 import gzip
 import struct
 from math import sqrt
 from pathlib import Path
 from typing import Optional
 
+# A NIfTI-1 header is always 348 bytes, and always starts with that number.
 HEADER_SIZE = 348
 
 _OFFSET_PIXDIM = 76
@@ -28,6 +34,8 @@ def read_orientation(path: Path) -> Optional[str]:
 def read_affine(path: Path) -> Optional[list[list[float]]]:
     raw, endian = _read_header(path)
 
+    # A code of 0 means that form was never set, so its contents are junk.
+    # The sform wins when both are present, as most NIfTI tools do the same.
     if struct.unpack_from(endian + "h", raw, _OFFSET_SFORM_CODE)[0] > 0:
         return [
             list(struct.unpack_from(endian + "4f", raw, offset))
@@ -44,6 +52,8 @@ def affine_to_orientation(affine: list[list[float]]) -> str:
     code = ""
     for column in range(3):
         values = [affine[row][column] for row in range(3)]
+        # The anatomical axis this voxel axis moves along fastest is the one
+        # that names it. Anything left over is obliquity, which we ignore.
         dominant = max(range(3), key=lambda row: abs(values[row]))
         towards, away = _AXIS_LABELS[dominant]
         code += towards if values[dominant] > 0 else away
@@ -61,6 +71,10 @@ def _read_header(path: Path) -> tuple[bytes, str]:
             "ensure it is a valid '.nii' file!"
         )
 
+    # NIfTI files can store their numbers in either byte order (endianness), and
+    # nothing in the header states which. The trick is that the first field is
+    # the header's own size, so whichever byte order reads it back as 348 is the
+    # one the file was written with.
     for endian in ("<", ">"):
         if struct.unpack_from(endian + "i", raw, 0)[0] == HEADER_SIZE:
             return raw, endian
@@ -76,6 +90,8 @@ def _qform_affine(raw: bytes, endian: str) -> list[list[float]]:
     offset = struct.unpack_from(endian + "3f", raw, _OFFSET_QOFFSET)
     pixdim = struct.unpack_from(endian + "8f", raw, _OFFSET_PIXDIM)
 
+    # Only three of the quaternion's four terms are stored, as it is always a
+    # unit quaternion and so the first can be recovered from the other three.
     remainder = 1.0 - (b * b + c * c + d * d)
     a = sqrt(remainder) if remainder > 0 else 0.0
 
@@ -85,6 +101,8 @@ def _qform_affine(raw: bytes, endian: str) -> list[list[float]]:
         [2 * (b * d - a * c), 2 * (c * d + a * b), a * a + d * d - b * b - c * c],
     ]
 
+    # A quaternion can only describe a proper rotation, so a left handed volume
+    # is flagged by a negative qfac which flips the third axis back around.
     qfac = -1.0 if pixdim[0] < 0 else 1.0
     scale = (pixdim[1], pixdim[2], pixdim[3] * qfac)
 
