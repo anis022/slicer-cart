@@ -626,6 +626,11 @@ def save_markups_to_nifti(
         # Notify Slicer that the "new" volume has been modified
         slicer.util.arrayFromVolumeModified(markup_volume_node)
 
+        # Restore the orientation the reference volume was originally stored in
+        target_orientation = get_original_orientation(reference_volume)
+        if target_orientation:
+            reorient_volume_node(markup_volume_node, target_orientation)
+
         # Save the result + its side-car labels
         save_volume_to_nifti(markup_volume_node, path)
         save_json_sidecar(path, sidecar_data)
