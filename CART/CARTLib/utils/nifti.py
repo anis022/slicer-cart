@@ -1,6 +1,9 @@
 """
 Reads orientation out of a NIfTI header, since Slicer discards the original when
 it loads a file. Standard library only, to keep CART dependency-free.
+
+Only NIfTI-1 is read here. A NIfTI-2 file raises instead, which leaves its
+orientation unrecorded and its saving behaviour unchanged.
 """
 
 import gzip
@@ -12,6 +15,8 @@ from typing import Optional
 # A NIfTI-1 header is always 348 bytes, and always starts with that number.
 HEADER_SIZE = 348
 
+# The NIfTI-1 header is a fixed layout, so the spec pins every field to a
+# known byte offset within it.
 _OFFSET_PIXDIM = 76
 _OFFSET_QFORM_CODE = 252
 _OFFSET_SFORM_CODE = 254
